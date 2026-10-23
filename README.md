@@ -21,9 +21,11 @@ instead, each on a release of its own:
 
 | Release | What it holds | Why it is here |
 |---|---|---|
+| [`update-0.18.1`](https://github.com/TumultuousProductions/Xsegon-helper-files/releases/tag/update-0.18.1) | Xsegon 0.18.1's update files, for Windows copies and for Linux copies | A copy of Xsegon downloads them by itself when you press Update now. |
 | [`sources-php-8.5.12`](https://github.com/TumultuousProductions/Xsegon-helper-files/releases/tag/sources-php-8.5.12) | The source code of PHP 8.5.12 and of GNU libiconv 1.19, unchanged | Xsegon runs on PHP 8.5.12 (from Xsegon 0.17.1), and Xsegon for Linux has GNU libiconv built into its PHP. Parts of both are under the GNU LGPL, which asks that their source be offered with the program. |
 
-Xsegon's update files move here from Xsegon 0.18.
+Each version of Xsegon from 0.18.1 has its update files on a release named
+`update-<version>`, where copies of Xsegon look for them.
 
 ## The rule
 
