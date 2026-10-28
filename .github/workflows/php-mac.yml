@@ -1,0 +1,63 @@
+# PHP for Xsegon on a Mac with an Apple chip, built the way Xsegon's tools/build-php-linux.sh builds
+# Linux's: static-php-cli's own builder, PHP's source checked against php.net's hash, one static file.
+# A Mac PHP is built on a Mac, and nobody here has one, so it is built on GitHub's.
+name: PHP for Mac
+
+on:
+  push:
+    branches: [Feature_mac_php_build]
+    paths: ['.github/workflows/php-mac.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 90
+    env:
+      XS_PHP: 8.5.12
+      # php.net's own hashes for the release (https://www.php.net/downloads)
+      XS_SRC_XZ: 08bc2eba2a588654ade1357174aa646b761556c862dda0678345ee29ed481209
+      XS_SRC_GZ: 81a0f450349e84b08eb43faa85f8a4c835684f3cc1c50471775d1317a046c525
+      XS_SRC_BZ2: ffb60edc437ced63b5137e4984db379a8111c50049c711510d8b958277efc1a8
+      XS_SPC_URL: https://github.com/crazywhalecc/static-php-cli/releases/download/2.8.5/spc-macos-aarch64.tar.gz
+      XS_SPC_SHA256: acf2f25d56d0cbf8e65aa82e5054fef555f7be7c5c38046c6e0819f266d83225
+      # The same extensions and picture libraries as Linux's build. Named XS_*: a plain LIBS is autoconf's own.
+      XS_EXT: bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbregex,mbstring,opcache,openssl,pcntl,pdo,pdo_sqlite,phar,posix,readline,session,simplexml,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib
+      XS_LIBS: libjpeg,libwebp,freetype
+    steps:
+      - name: Build PHP
+        run: |
+          set -eu
+          mkdir build && cd build
+          curl -fsSL --retry 2 -o spc.tar.gz "$XS_SPC_URL"
+          echo "$XS_SPC_SHA256  spc.tar.gz" | shasum -a 256 -c -
+          tar -xzf spc.tar.gz && chmod +x spc
+          ./spc doctor --auto-fix
+          ./spc download --with-php="$XS_PHP" --for-extensions="$XS_EXT" --for-libs="$XS_LIBS" --prefer-pre-built
+          src=$(ls downloads/php-"$XS_PHP".tar.* 2>/dev/null | head -n 1)
+          case "$src" in
+            *.tar.xz)  want=$XS_SRC_XZ ;;
+            *.tar.gz)  want=$XS_SRC_GZ ;;
+            *.tar.bz2) want=$XS_SRC_BZ2 ;;
+            *) echo "PHP $XS_PHP's source was not downloaded" >&2; exit 1 ;;
+          esac
+          echo "$want  $src" | shasum -a 256 -c -
+          ./spc build "$XS_EXT" --with-libs="$XS_LIBS" --build-cli
+          # spc can end a failed build without saying so in its exit code.
+          test -x buildroot/bin/php
+          got=$(./buildroot/bin/php -r 'echo PHP_VERSION;')
+          test "$got" = "$XS_PHP"
+          ./buildroot/bin/php -m
+          otool -L buildroot/bin/php
+          mkdir ../out && cp buildroot/bin/php ../out/php
+          cd ../out
+          tar -czf "php-$XS_PHP-cli-macos-aarch64.tar.gz" php
+          shasum -a 256 "php-$XS_PHP-cli-macos-aarch64.tar.gz" | tee "php-$XS_PHP-cli-macos-aarch64.tar.gz.sha256"
+          rm php
+      - uses: actions/upload-artifact@v4
+        with:
+          name: php-mac
+          path: out/
+          retention-days: 30
