@@ -1,0 +1,96 @@
+# Runs a Mac download of Xsegon on GitHub's Mac machine before a person has it: starts it as
+# downloaded, has it set up RetroArch and two cores for real through its own API, tries
+# Settings > Launching > RetroArch to use both ways and the 7-Zip road, and photographs its window.
+# The download comes from a draft release here (mac-check), which only the repo's owner can see.
+name: Mac check
+
+on:
+  push:
+    branches: [Feature_mac_php_build]
+    paths: ['.github/workflows/mac-check.yml', '.github/mac-check.php']
+
+permissions:
+  contents: write   # a draft release's files are only for those who may write
+
+jobs:
+  check:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+
+      - name: Get the download, marked as a browser marks it
+        run: |
+          set -eu
+          X="$RUNNER_TEMP/x/Xsegon-v0.20-mac"
+          echo "X=$X" >> "$GITHUB_ENV"
+          gh release download mac-check --repo "$GITHUB_REPOSITORY" --pattern 'xsegon-mac-check.tar.gz' --dir "$RUNNER_TEMP"
+          mkdir -p "$RUNNER_TEMP/x" && tar -xzf "$RUNNER_TEMP/xsegon-mac-check.tar.gz" -C "$RUNNER_TEMP/x"
+          # Safari and Archive Utility leave every file with macOS's downloaded mark.
+          find "$RUNNER_TEMP/x" -type f -exec xattr -w com.apple.quarantine "0083;$(printf %x "$(date +%s)");Safari;" {} +
+          ls -la "$X" "$X/Xsegon/runtime/php" "$X/Xsegon/runtime/7z"
+          cat "$X/Xsegon/BUILD"
+
+      - name: Start it, as Start Xsegon.command does
+        run: |
+          cd "$X"
+          nohup sh "Start Xsegon.command" --no-browser --port 8099 > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in $(seq 1 60); do
+            curl -s -m 2 http://127.0.0.1:8099/api/status.php | grep -q '"ok":true' && break
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/server.log"
+
+      - name: Check it through its own API
+        run: |
+          cd "$X/Xsegon"
+          ./runtime/php/php "$GITHUB_WORKSPACE/.github/mac-check.php" "$PWD"
+
+      - name: RetroArch to use, the other way
+        run: |
+          cd "$X/Xsegon"
+          sudo ditto data/emulators/retroarch/RetroArch.app /Applications/RetroArch.app
+          curl -s -X POST -H 'Content-Type: application/json' -d '{"launch":{"macRetroArch":"applications"}}' http://127.0.0.1:8099/api/settings.php | head -c 200; echo
+          echo "--- the start script, set to Applications:"
+          sh -x data/emulators/retroarch/retroarch --version 2>&1 | grep -E "exec|Version" | head -5
+          curl -s -X POST -H 'Content-Type: application/json' -d '{"launch":{"macRetroArch":"own"}}' http://127.0.0.1:8099/api/settings.php > /dev/null
+          echo "--- and back to Xsegon's own:"
+          sh -x data/emulators/retroarch/retroarch --version 2>&1 | grep -E "exec|Version" | head -5
+
+      - name: The second road, 7-Zip opening the disk image
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o ra.dmg https://buildbot.libretro.com/stable/1.22.2/apple/osx/universal/RetroArch_Metal.dmg
+          "$X/Xsegon/runtime/7z/7zz" x ra.dmg -o7ztry -y -bso0 -bsp0 || echo "7zz exit $?"
+          app=$(find 7ztry -maxdepth 4 -name RetroArch.app -type d | head -n 1)
+          echo "found: $app"
+          chmod 755 "$app/Contents/MacOS/RetroArch"
+          "$app/Contents/MacOS/RetroArch" --version 2>&1 | head -3 || true
+
+      - name: Its window, in Chrome
+        run: |
+          cd "$X/Xsegon"
+          ./runtime/php/php bin/open.php --Port=8099; echo
+          sleep 25
+          screencapture -x "$RUNNER_TEMP/window.png" || echo "no screenshot"
+          curl -s -X POST -H 'Content-Type: application/json' -d '{"op":"close"}' http://127.0.0.1:8099/api/window.php; echo
+
+      - name: Its log
+        if: always()
+        run: tail -n 250 "$X/Xsegon/data/log/"*.log || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mac-check
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/window.png
+            ${{ runner.temp }}/server.log
+            ${{ runner.temp }}/x/Xsegon-v0.20-mac/Xsegon/data/log/
+            ${{ runner.temp }}/x/Xsegon-v0.20-mac/Xsegon/data/setup-job.json
+            ${{ runner.temp }}/x/Xsegon-v0.20-mac/Xsegon/data/emulators/retroarch/retroarch.cfg
