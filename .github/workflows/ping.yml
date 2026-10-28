@@ -1,0 +1,16 @@
+# Asks for any GitHub machine at all, to tell a slow Mac queue from Actions not running for this account.
+name: Ping
+
+on:
+  push:
+    branches: [Feature_mac_php_build]
+    paths: ['.github/workflows/ping.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "a machine answered at $(date -u +%H:%M:%S)"
