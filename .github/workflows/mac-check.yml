@@ -14,7 +14,13 @@ permissions:
 
 jobs:
   check:
-    runs-on: macos-15
+    # As the PHP build: GitHub's Apple-chip Macs are short, so three kinds are asked for, and each
+    # one that runs is one more macOS proven.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-14, macos-26]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
@@ -34,6 +40,9 @@ jobs:
           find "$RUNNER_TEMP/x" -type f -exec xattr -w com.apple.quarantine "0083;$(printf %x "$(date +%s)");Safari;" {} +
           ls -la "$X" "$X/Xsegon/runtime/php" "$X/Xsegon/runtime/7z"
           cat "$X/Xsegon/BUILD"
+          sw_vers
+          # An Apple chip runs nothing unsigned: Xsegon's own two programs, as they arrive.
+          for p in "$X/Xsegon/runtime/php/php" "$X/Xsegon/runtime/7z/7zz"; do codesign -dv "$p" 2>&1 | grep -E "^(Executable|Signature|flags|CodeDirectory)" || echo "$p: no signature"; done
 
       - name: Start it, as Start Xsegon.command does
         run: |
@@ -86,7 +95,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mac-check
+          name: mac-check-${{ matrix.os }}
           retention-days: 14
           path: |
             ${{ runner.temp }}/window.png
