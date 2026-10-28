@@ -13,9 +13,17 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    # GitHub's Apple-chip Macs are short and a job waiting 15 minutes is dropped: three kinds are
+    # asked for at once, and the first one built is the one used.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-14, macos-26]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     env:
+      # Runs on macOS 13 and later, whichever macOS builds it.
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
       XS_PHP: 8.5.12
       # php.net's own hashes for the release (https://www.php.net/downloads)
       XS_SRC_XZ: 08bc2eba2a588654ade1357174aa646b761556c862dda0678345ee29ed481209
@@ -51,6 +59,10 @@ jobs:
           test "$got" = "$XS_PHP"
           ./buildroot/bin/php -m
           otool -L buildroot/bin/php
+          # The oldest macOS it runs on, and its signature: an Apple chip runs nothing unsigned.
+          vtool -show-build buildroot/bin/php
+          codesign -dv buildroot/bin/php 2>&1
+          codesign -v buildroot/bin/php
           mkdir ../out && cp buildroot/bin/php ../out/php
           cd ../out
           tar -czf "php-$XS_PHP-cli-macos-aarch64.tar.gz" php
@@ -58,6 +70,6 @@ jobs:
           rm php
       - uses: actions/upload-artifact@v4
         with:
-          name: php-mac
+          name: php-mac-${{ matrix.os }}
           path: out/
           retention-days: 30
