@@ -32,10 +32,12 @@ jobs:
       - name: Get the download, marked as a browser marks it
         run: |
           set -eu
-          X="$RUNNER_TEMP/x/Xsegon-v0.20-mac"
-          echo "X=$X" >> "$GITHUB_ENV"
           gh release download mac-check --repo "$GITHUB_REPOSITORY" --pattern 'xsegon-mac-check.tar.gz' --dir "$RUNNER_TEMP"
           mkdir -p "$RUNNER_TEMP/x" && tar -xzf "$RUNNER_TEMP/xsegon-mac-check.tar.gz" -C "$RUNNER_TEMP/x"
+          # Whichever version the download is: its one top folder.
+          X=$(find "$RUNNER_TEMP/x" -mindepth 1 -maxdepth 1 -type d -name 'Xsegon-v*-mac' | head -n 1)
+          [ -n "$X" ] || { echo "no Xsegon-v*-mac folder in the download"; exit 1; }
+          echo "X=$X" >> "$GITHUB_ENV"
           # Safari and Archive Utility leave every file with macOS's downloaded mark.
           find "$RUNNER_TEMP/x" -type f -exec xattr -w com.apple.quarantine "0083;$(printf %x "$(date +%s)");Safari;" {} +
           ls -la "$X" "$X/Xsegon/runtime/php" "$X/Xsegon/runtime/7z"
@@ -100,6 +102,6 @@ jobs:
           path: |
             ${{ runner.temp }}/window.png
             ${{ runner.temp }}/server.log
-            ${{ runner.temp }}/x/Xsegon-v0.20-mac/Xsegon/data/log/
-            ${{ runner.temp }}/x/Xsegon-v0.20-mac/Xsegon/data/setup-job.json
-            ${{ runner.temp }}/x/Xsegon-v0.20-mac/Xsegon/data/emulators/retroarch/retroarch.cfg
+            ${{ runner.temp }}/x/*/Xsegon/data/log/
+            ${{ runner.temp }}/x/*/Xsegon/data/setup-job.json
+            ${{ runner.temp }}/x/*/Xsegon/data/emulators/retroarch/retroarch.cfg
